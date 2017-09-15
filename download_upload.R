@@ -41,8 +41,18 @@ download_upload_PHSII <- function(){
   
   ## upload all the files onto dropbox
   sapply(unname(upload_filenames_dir), function(x) drop_upload(x, dest = "PHS II Data"))
+  
+  ## deleting all files that are not uploaded today
+  
+  ## getting file path
+  drop_files <- drop_dir("PHS II Data")$path
+  
+  ## getting index of files to be deleted and apply delete on all
+  del_index <- !(grepl(pattern = as.character(Sys.Date()), x = drop_files))
+  sapply(drop_files[del_index], function(x) drop_delete(x))
 }
 
 ## run the function 
 download_upload_PHSII()
 
+f
