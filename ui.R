@@ -27,9 +27,13 @@ fluidPage(
                          hr(),
                          selectInput("select_ind_type", label = h3("Indicator Type:"),
                                      choices = list("Breastfeeding" = "BF", "Antenatal" = "AN",
-                                                    "Delivery" = "D", "Postnatal" = "PN",
-                                                    "Immunization" = "IM"),
+                                                    "Delivery" = "D", "Postnatal" = "PN", "Immunization" = "IM",
+                                                    "All-Punjab Level" = "glob"),
                                      selected = 1),
+                         conditionalPanel("input.select_ind_type == 'IM'",
+                                          radioButtons("age_group", label = h4("Select age group:"),
+                                                       choices = list("1 - 11 months" = 1, 
+                                                                      "12 - 23 months" = 2))),
                          DT::dataTableOutput("indicators_table"),
                          verbatimTextOutput("test")),
                 tabPanel("Complete Data", 
@@ -53,7 +57,8 @@ fluidPage(
                                                     "All Dates-Wrong skip" = "7",
                                                     "All but BCG/ OPV0" = "8",
                                                     "Filters" = "9",
-                                                    "Negative age" = "10")),
+                                                    "Negative age" = "10",
+                                                    "Missing dates - IM4 = Yes" = "11")),
                          conditionalPanel("input.incon_det_type == 1",
                                           radioButtons("asset", label = h3("Select Asset"),
                                                        choices = list("Television" = "hc8_opt3", "Fridge" = "hc8_opt5", "Computer" = "hc8_opt7", 
@@ -61,7 +66,13 @@ fluidPage(
                                                                       "Dunky Pump" = "hc8_opt15", "Electricity fuel" = "hc6"), 
                                                        selected = "hc8_opt3")
                          ),
-                         DT::dataTableOutput("without_elec"))
+                         DT::dataTableOutput("without_elec")),
+                tabPanel("Enum. Prog", 
+                         hr(),
+                         radioButtons("prog_type", label = h4("Summary type:"),
+                                      choices = list("Date-wise" = "date_wise",
+                                                     "Consolidated" = "consol")),
+                         DT::dataTableOutput("Enum_Prog"))
     )
   )
 )

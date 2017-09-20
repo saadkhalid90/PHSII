@@ -69,9 +69,13 @@ function(input, output) {
   
   create_indicators_table <- reactive({
     switch(input$select_ind_type,
+      "glob" = {
+        indic <- global_ind(mother_data = dataIn()$mother, child_data = dataIn()$child, hc_data = dataIn()$hc)
+        names(indic) <- c("indicator_value")
+      },
       "BF" = {
         split_mother <- time_value_split(var = "mn25", data_set = dataIn()$mother, remove_orig = T)
-        indic <- as.data.frame(compute_BF_indic(split_mother, dataIn()$child, "district"))
+        indic <- as.data.frame(compute_BF_indic(split_mother, dataIn()$child, dataIn()$hc, "district"))
       },
       "AN" = {
         indic <- as.data.frame(compute_AN_indic(mother_data = dataIn()$mother, type = "district"))
@@ -89,7 +93,17 @@ function(input, output) {
         indic <- as.data.frame(compute_PN_indic(mother_data = mother_time_split, type = "district"))
       }, 
       "IM" = {
-        indic <- compute_immun_district(mother_data = dataIn()$mother, child_data = dataIn()$child)
+        ## append the date of enumeration and calculate the childs age, also filtering based on age_groups
+        child <- append_date_enum(data = dataIn()$child, hc_data = dataIn()$hc) 
+        if (input$age_group == 1){
+          child <- child %>% 
+            filter(child_age < 12)
+        }
+        else if (input$age_group == 2){
+          child <- child %>% 
+            filter(child_age >= 12 & child_age < 24)
+        }
+        indic <- compute_immun_district(mother_data = dataIn()$mother, child_data = child)
       }
     )
     return(list(indic = indic, col_names = names(indic)))
@@ -139,7 +153,7 @@ function(input, output) {
     else {
       DT::datatable(non_elect_sum(hc_data = dataIn()$hc,
                                   mother_data = dataIn()$mother,
-                                  child_data = dataIn()$child))
+                                  child_data = dataIn()$child), options = list(pageLength = 50))
     }
   })
   output$without_elec <- DT::renderDataTable(DT::datatable({
@@ -176,11 +190,20 @@ function(input, output) {
              },
              "10" = {
                id_neg_age(child_data = dataIn()$child, hc_data = dataIn()$hc)
+             },
+             "11" = {
+               immun_incon(child_data = dataIn()$child, hc_data = dataIn()$hc)$any_empty_all_rec
              }
       )
       
     }
     }, options = list(pageLength = 50)))
+  
+  output$Enum_Prog <- DT::renderDataTable(DT::datatable(enum_progress(mother_data = dataIn()$mother,
+                                                                      child_data = dataIn()$child,
+                                                                      hc_data = dataIn()$hc)[[input$prog_type]],
+                                                        filter = 'top',
+                                                        options = list(PageLength = 50)))
   ## output$check <-  renderPrint(summary(immun_incon(child_data = dataIn()$child, hc_data = dataIn()$hc)$all_Dates_WS))
 }
 

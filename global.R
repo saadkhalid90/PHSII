@@ -381,22 +381,53 @@ create_enum_summary <- function(hl_data, hc_data, mother_data, child_data){
 #   full_join(moth_child_miss, by = c("hh1", "hh3name"))
 
 ## functions for computing indicators
-
-compute_BF_indic<- function(mother_data, child_data, type = "global"){
+compute_BF_indic<- function(mother_data, child_data, hc_data, type = "global"){
   ever_breastfed <- sum(mother_data$mn24 == 1, na.rm = T)/ nrow(mother_data)
   ## mother_data_split <- time_value_split(var = "mn25", data_set = mother_data, remove_orig = T)
   early_breastfed <- sum(as.character(mother_data$mn25_R) == '000', na.rm = T)/ nrow(mother_data)
   bottle_feed <- sum(child_data$bd4 == 1, na.rm = T)/ nrow(child_data)
   excl_breastfed <- sum(mother_data$mn26 == 2, na.rm = T)/ nrow(mother_data)
   
+  ## --- EXCLUSIVE BF from BD section --- 
+  ## append age to child table
+  child_date <- append_date_enum(child_data, hc_data)
+  
+  child_6 <- child_date %>% filter(child_age <= 6)
+  ## child liquid food intake 
+  ## selecting the relevant columns
+  child_bd7 <- child_6 %>% select(contains("bd7"))
+  ## creating a data frame of logicals, TRUE indicates a no (code "2")
+  child_bd7 <- as.data.frame(sapply(child_bd7, as.character) == "2")
+  
+  ## child solid food intake
+  ## selecting the relevant columns
+  child_bd8 <- child_6 %>% select(contains("bd8"))
+  ## creating a data frame of logicals, TRUE indicates a no (code "2")
+  child_bd8 <- as.data.frame(sapply(child_bd8, as.character) == "2")
+  
+  ## if all true  
+  child_bd7_log <- rowSums(child_bd7, na.rm = T, dims = 1) == ncol(child_bd7)
+  child_bd8_log <- rowSums(child_bd8, na.rm = T, dims = 1) == ncol(child_bd8)
+  
+  child_bd8_log
+  
+  BD2_log <- child_6$bd2 == 1
+  BD3_log <- child_6$bd3 == 1
+  
+  exc_log <- Reduce("&", list(BD2_log, BD3_log, child_bd7_log, child_bd8_log))
+  
+  excl_breastfed_BF <- sum(exc_log, na.rm = T)/nrow(child_6)
+  
   if (type == "district"){
     mother_data <- mother_data[!(is.na(mother_data$hh1)), ]
     child_data <- child_data[!(is.na(child_data$hh1)), ]
-    mother_data$district <- as.character(cluster_districts$NAME.OF.DISTRICT[as.integer(as.character(mother_data$hh1))])
-    child_data$district <- as.character(cluster_districts$NAME.OF.DISTRICT[as.integer(as.character(child_data$hh1))])
+    mother_data$district <- trimws(as.character(cluster_districts$NAME.OF.DISTRICT[as.integer(as.character(mother_data$hh1))]), which = "both")
+    child_data$district <- trimws(as.character(cluster_districts$NAME.OF.DISTRICT[as.integer(as.character(child_data$hh1))]), which = "both")
+    hc_data$district <- trimws(as.character(hc_data$district), which = "both")
     district_inData <- unique(mother_data$district)
     district_level <- t(as.data.frame(sapply(district_inData, function(x) compute_BF_indic(subset(mother_data, district == x), 
-                                                                                           subset(child_data, district == x)))))
+                                                                                           subset(child_data, district == x),
+                                                                                           subset(hc_data, district == x)))))
     
     return(district_level)
   }
@@ -404,12 +435,16 @@ compute_BF_indic<- function(mother_data, child_data, type = "global"){
     return(c(ever_bf = round(ever_breastfed, 4), 
              early_bf = round(early_breastfed, 4), 
              bottle_feed = round(bottle_feed, 4), 
-             excl_bf = round(excl_breastfed, 4))) 
+             excl_bf = round(excl_breastfed, 4),
+             excl_bf_BD = round(excl_breastfed_BF, 4))) 
   }
 }
 
-
 compute_AN_indic <- function(mother_data, type = "global"){
+  ## computing the coverage of AN care 
+  AN_log <- (mother_data$mn1 == 1)
+  AN_cov <- sum(AN_log, na.rm = T)/ nrow(mother_data)
+  
   ## content of antenatal care
   bloodp_logic <- (mother_data$mn4_bloodpressure == 1) 
   blood_logic <- (mother_data$mn4_blood == 1)
@@ -430,12 +465,10 @@ compute_AN_indic <- function(mother_data, type = "global"){
     return(district_level)
   }
   else {
-    return(c(three = round(three, 4), 
+    return(c(AN_cov = round(AN_cov, 4),
+             three = round(three, 4), 
              all_four = round(all_four, 4)))  
   }
-  
-  
-  
 }
 
 
@@ -472,53 +505,70 @@ compute_delivery_indic <- function(mother_data, type = "global"){
   }
 }
 
-
+## functions for calculating Post natal indicators (global and district level)
 compute_PN_indic <- function(mother_data, type = "global"){
   
   ## stay in Health facility
-  # if (type == "global"){
-  #   mother_data_split <- time_value_split(var = "pn2", data_set = mother_data, remove_orig = T)
-  # }
+  ## relevant variable PN2
+  ## greater than 22 hours to be counted
   
+  ## converting time cat. and units to numeric
   pn2_R <- as.numeric(as.character(mother_data$pn2_R))
   pn2_I <- as.numeric(as.character(mother_data$pn2_I))
+  
+  ## creating logical for greater than 12 hours and summing it up to get numerator
   PN_stay_num <- sum((pn2_R == 1 & pn2_I >=12) | (pn2_R >= 2 & pn2_R <= 3), na.rm = T)
+  ## computing the post-partum stay indicator
   PN_stay <- PN_stay_num/ nrow(mother_data) 
   
   ## PN health check for newborn
-  # if (type == "global"){
-  #   mother_data_split <- time_value_split(var = "pn12a", data_set = mother_data, remove_orig = T)
-  #   mother_data_split <- time_value_split(var = "pn12b", data_set = mother_data_split, remove_orig = T)
-  # }
+  ## child was checked at health facility, home or was geven a 
+  ## post natal health visit within 2 days
+  ## Relevant variables - PN3, PN7, PN12A, PN12B
   
+  ## getting logical for whether the child was checked in facility or at home
+  pn3_log <- mother_data$pn3 == 1 
+  pn7_log <- mother_data$pn7 == 1
+  
+  ## converting PN12A to numeric so that checks can be applied (within 2 days after birth)
   pn12a_R <- as.numeric(as.character(mother_data$pn12a_R))
   pn12a_I <- as.numeric(as.character(mother_data$pn12a_I))
   pn12a_logic <- (pn12a_R == 1) | (pn12a_R == 2 & pn12a_I <= 2)
   
+  ## converting PN12A to numeric so that checks can be applied (within 2 days after birth)
   pn12b_R <- as.numeric(as.character(mother_data$pn12b_R))
   pn12b_I <- as.numeric(as.character(mother_data$pn12b_I))
   pn12b_logic <- (pn12b_R == 1) | (pn12b_R == 2 & pn12b_I <= 2)
   
-  hck_NB_num <-  sum(pn12a_logic, na.rm = T) + sum(pn12b_logic, na.rm = T)
+  ## combining all logicals through an or operator
+  hck_NB_log <- Reduce("|", list(pn3_log, pn7_log, pn12a_logic, pn12b_logic))
+  
+  hck_NB_num <-  sum(hck_NB_log, na.rm = T)
   hck_NB <- hck_NB_num/ nrow(mother_data)
   
   ## PN health check for the mother
-  # if (type == "global"){
-  #   mother_data_split <- time_value_split(var = "pn21a", data_set = mother_data, remove_orig = T)
-  #   mother_data_split <- time_value_split(var = "pn21b", data_set = mother_data_split, remove_orig = T)
-  # }
+  ## getting logical whether the mother received a health check in facility or at home
+  pn4_log <- mother_data$pn4 == 1 
+  pn8_log <- mother_data$pn8 == 1
+  
+  ## converting PN21A to numeric so that checks can be applied (within 2 days after birth of child)
   
   pn21a_R <- as.numeric(as.character(mother_data$pn21a_R))
   pn21a_I <- as.numeric(as.character(mother_data$pn21a_I))
   pn21a_logic <- (pn21a_R == 1) | (pn21a_R == 2 & pn21a_I <= 2)
   
+  ## converting PN21B to numeric so that checks can be applied (within 2 days after birth of child)
   pn21b_R <- as.numeric(as.character(mother_data$pn21b_R))
   pn21b_I <- as.numeric(as.character(mother_data$pn21b_I))
   pn21b_logic <- (pn21b_R == 1) | (pn21b_R == 2 & pn21b_I <= 2)
   
-  hck_moth_num <-  sum(pn21a_logic, na.rm = T) + sum(pn21b_logic, na.rm = T)
+  ## combining all logicals through an or operator
+  hck_moth_log <- Reduce("|", list(pn4_log, pn8_log, pn21a_logic, pn21b_logic))
+  
+  hck_moth_num <-  sum(hck_moth_log, na.rm = T)
   hck_moth <- hck_moth_num/ nrow(mother_data)
   
+  ## if type is "district", make all computations at the district level
   if (type == "district"){
     mother_data <- mother_data[!(is.na(mother_data$hh1)), ]
     mother_data$district <- as.character(cluster_districts$NAME.OF.DISTRICT[as.integer(as.character(mother_data$hh1))])
@@ -535,23 +585,69 @@ compute_PN_indic <- function(mother_data, type = "global"){
   }
 }
 
-
-compute_immun_indic<- function(data, var1, var2, type = "global"){
+append_date_enum <- function(data, hc_data){
+  ## getting date of enumeration (hh5) from the hc data
+  hc_date <- hc_data %>% select(hh1, hh2, hh5)
+  ## appending the date to the dataset in the argument
+  data  <- data %>% left_join(hc_date, by = c("hh1", "hh2"))
   
+  ## getting the date of enumeration and convertingit into date object
+  enum_date <- as.Date(data[, "hh5"], format = "%d-%m-%Y")
+  ## getting the birthdate and converting into date element
+  birth_date <- as.Date(data[, "ag1"], format = "%d-%m-%Y")
+  
+  ## computing child's age at the date of the interview
+  data$child_age <- interval(start = birth_date, end = enum_date) /
+    duration(num = 1, units = "months")
+  
+  ## return the appended data
+  return(data)
+}
+
+compute_immun_indic<- function(data, var1, var2, type = "global", age_group = 1){
+  ## getting the birthdate and converting into date element
+  birth_date <- as.Date(data[, "ag1"], format = "%d-%m-%Y")
+  
+  ## getting the dates of the relevant vaccines
   dates_text <- data[, var1]
   dates <- as.Date(data[, var1],format = "%d-%m-%Y")
   
-  birth_date <- as.Date(data[, "ag1"], format = "%d-%m-%Y")  
-  
+  ## computing age at vaccination in months
   interv <- interval(start = birth_date, end = dates) /
     duration(num = 1, units = "months")
   
+  ## checking if the child received the vaccine within his/ her first birthday
   card <- (interv < 12)
   card[is.na(card)] <- FALSE
   
+  ## count mentions of vaccine without date on teh card
   card_no_date <- grepl(pattern = "44", x = dates_text)
   card_no_date[is.na(card_no_date)] <- FALSE
   
+  ## also cheking if dates exist for vacine one and two if the variable is opv3 or penta3
+  
+  if (var1 == "im3_opv.3"){
+    card_2 <- as.character(data[ ,"im3_opv.2"]) != ""
+    card_2[is.na(card_2)] <- FALSE
+    card_1 <- as.character(data[ ,"im3_opv.1"]) != ""
+    card_1[is.na(card_1)] <- FALSE
+    
+    card <- card & card_1 & card_2
+  }
+  
+  if (var1 == "im3_penta.3"){
+    card_2 <- as.character(data[ ,"im3_penta.2"]) != ""
+    card_2[is.na(card_2)] <- FALSE
+    card_1 <- as.character(data[ ,"im3_penta1"]) != ""
+    card_1[is.na(card_1)] <- FALSE
+    
+    card <- card & card_1 & card_2
+  }
+  
+  ## checking if var2 is either of im10 or im12, in that case check if teh child has
+  ## gotten at least three vaccines (polio and penta)
+  
+  ## if any other vaccines, just check if the mother recalls 
   if (var2 %in% c("im10", "im12")){
     recall <- (data[, var2] >= 3 & data[, var2] < 8)
     recall[is.na(recall)] <- FALSE
@@ -562,8 +658,9 @@ compute_immun_indic<- function(data, var1, var2, type = "global"){
     recall[is.na(recall)] <- FALSE
   }
   
+  ## or operation on the three logicals (card, card_nodate and recall
   logic <- Reduce("|", list(card, card_no_date, recall))
-  ind <- sum(logic)/ nrow(data)
+  ind <- sum(logic, na.rm = T)/ nrow(data)
   
   return(ind)
 }
@@ -595,6 +692,37 @@ compute_immun_district <- function(mother_data, child_data) {
                                   NN_Tatanus = percent(district_NT, 2))
   row.names(district_level_df) <- districts
   return(district_level_df)
+}
+
+global_ind <- function(mother_data, child_data, hc_data){
+  AN <- compute_AN_indic(mother_data, type = "global")
+  mother_time_split <- time_value_split(var = "pn2", data_set = mother_data, remove_orig = T)
+  mother_time_split <- time_value_split(var = "pn12a", data_set = mother_time_split, remove_orig = T)
+  mother_time_split <- time_value_split(var = "pn12b", data_set = mother_time_split, remove_orig = T)
+  mother_time_split <- time_value_split(var = "pn21a", data_set = mother_time_split, remove_orig = T)
+  mother_time_split <- time_value_split(var = "pn21b", data_set = mother_time_split, remove_orig = T)
+  mother_time_split <- time_value_split(var = "mn25", data_set = mother_time_split, remove_orig = T)
+  
+  PN <- compute_PN_indic(mother_time_split, type = "global")
+  BF <- compute_BF_indic(mother_time_split, child_data, hc_data, type = "global")
+  deliv <- compute_delivery_indic(mother_data, type = "global")
+  
+  child <- append_date_enum(child_data, hc_data)
+  child_under12 <- child %>% filter(child_age < 12)
+  child_over12 <- child %>% filter(child_age >= 12 & child_age < 24)
+  
+  ## immunization indicators
+  immun <- c("bcg_under12" = compute_immun_indic(child_under12, var1 = "im3_bcg", var2 = "im7"),
+             "OPV3_under12" = compute_immun_indic(child_under12, var1 = "im3_opv.3", var2 = "im10"),
+             "Penta3_under12" = compute_immun_indic(child_under12, var1 = "im3_penta.3", var2 = "im12"),
+             "measlesI_under12" = compute_immun_indic(child_under12, var1 = "im3_measles.I", var2 = "X16a"),
+             "bcg_over12" = compute_immun_indic(child_over12, var1 = "im3_bcg", var2 = "im7"),
+             "OPV3_over12" = compute_immun_indic(child_over12, var1 = "im3_opv.3", var2 = "im10"),
+             "Penta3_over12" = compute_immun_indic(child_over12, var1 = "im3_penta.3", var2 = "im12"),
+             "measlesI_over12" = compute_immun_indic(child_over12, var1 = "im3_measles.I", var2 = "X16a"),
+             "NT_tatanus" = compute_NT_indic(mother_data) 
+  )
+  return(as.data.frame(c(AN, PN, BF, deliv, immun)))
 }
 
 remove_empty_rows <- function(data){
@@ -732,12 +860,21 @@ immun_incon <- function(child_data, hc_data){
   all_but_BCG <- child_data[all_but_BCG_logic, ] %>% select(hh1, hh2)
   all_but_BCG <- join_cred(all_but_BCG, hc_data)
   
+  ## any date empty but im4 == Yes
+  
+  any_empty_logic <- (rowSums(empty_date_logic, na.rm = T) > 0)
+  all_recorded_log <- as.character(child_data$im4) == "Yes"
+  
+  ## getting the ids and joining creds
+  any_empty_all_rec <- child_data[(any_empty_logic & all_recorded_log), ] %>% select(hh1, hh2)
+  any_empty_all_rec <- join_cred(any_empty_all_rec, hc_data)
+  
   ## returning a list of three inconsistency tables
   return(list(card_seen_ND = card_seen_ND,
               all_Dates_WS = all_Dates_No,
-              all_but_BCG = all_but_BCG))
+              all_but_BCG = all_but_BCG,
+              any_empty_all_rec = any_empty_all_rec))
 }
-# 
 
 id_neg_age <- function(child_data, hc_data) {
   ## get birthday of the children
@@ -786,6 +923,10 @@ non_elect_sum <- function(hc_data, mother_data, child_data){
     group_by(district) %>%
     summarize(all_but_BCG = n())
   
+  summary_EWS <- immun_incon_$any_empty_all_rec %>%
+    group_by(district) %>%
+    summarize(empt_dat_im4 = n())
+  
   ## getting adult functioning incon
   AF_incon_ <- AF_incon(mother_data = mother_data, hc_data = hc_data)
   
@@ -825,6 +966,7 @@ non_elect_sum <- function(hc_data, mother_data, child_data){
   non_elect_sum <- summary_ABCG %>%
     full_join(summary_ADWS, by = c('district')) %>%
     full_join(summary_CSND, by = c('district')) %>%
+    full_join(summary_EWS, by = c('district')) %>%
     full_join(summary_glasses, by = c('district')) %>%
     full_join(summary_h_aid, by = c('district')) %>%
     full_join(summary_hosp_NT, by = c('district')) %>%
@@ -963,6 +1105,48 @@ filter_incon <- function(mother_data, hc_data){
 }
 
 
+plot_incon <- function(dataset){
+  dataset$hh5 <- as.Date(dataset$hh5, format = "%d-%m-%Y")
+  date_wise <- dataset %>% 
+    group_by(hh5) %>%
+    summarise(n = n())
+  library(ggplot2)
+  ggplot(data = date_wise, aes(hh5, n)) + geom_line() + 
+    geom_point() 
+}
+  
+## plot_incon(dataset = immun_incon(child, hc)$any_empty_all_rec)
 
-
+## function to summarize enumerator level progress
+enum_progress <- function(mother_data, child_data, hc_data){
+  ## getting the seemingly completed interviews
+  comp_int <- complete_interviews(mother_data = mother_data, 
+                                  children_data = child_data, 
+                                  hc_data = hc_data)
+  ## converting date to a date object and joining enum level info in child interview 
+  comp_int$hc_mother$hh5 <- as.Date(comp_int$hc_mother$hh5, format = '%d-%m-%Y')
+  comp_int$child <- join_cred(data = comp_int$child, hc_data = comp_int$hc_mother)
+  
+  ## creating a summary(cluster level, datewise) - HHs and mother
+  enum_date_wise_mo <- comp_int$hc_mother %>% 
+    group_by(hh1, hh5, hh3name) %>%
+    summarise(HH = n_distinct(hh2),
+              n_mothers = n())
+  
+  ## creating a summary(cluster level, datewise) - HHs and mother
+  enum_date_wise_ch <- comp_int$child %>% 
+    group_by(hh1, hh5, hh3name) %>%
+    summarise(n_child = n())
+  
+  ## joining mother and child interview numbers
+  enum_date_wise <- enum_date_wise_mo %>% left_join(enum_date_wise_ch, 
+                                                    by = c('hh1', 'hh5', 'hh3name')) 
+  ## creating summary (consolidated)
+  consol_enum <- enum_date_wise %>% 
+    group_by(hh3name) %>%
+    summarise(HH = sum(HH), n_mothers = sum(n_mothers), n_child = sum(n_child))
+  
+  ## returning a list of consolidated and datewise summary
+  return(list(consol = consol_enum, date_wise = enum_date_wise))
+}
 
