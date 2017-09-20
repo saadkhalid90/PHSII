@@ -1129,7 +1129,7 @@ enum_progress <- function(mother_data, child_data, hc_data){
   
   ## creating a summary(cluster level, datewise) - HHs and mother
   enum_date_wise_mo <- comp_int$hc_mother %>% 
-    group_by(hh1, hh5, hh3name) %>%
+    group_by(hh1, hh5, hh3name, hh3code) %>%
     summarise(HH = n_distinct(hh2),
               n_mothers = n())
   
@@ -1141,11 +1141,12 @@ enum_progress <- function(mother_data, child_data, hc_data){
   ## joining mother and child interview numbers
   enum_date_wise <- enum_date_wise_mo %>% left_join(enum_date_wise_ch, 
                                                     by = c('hh1', 'hh5', 'hh3name')) 
+  enum_date_wise$hh3code <- as.factor(enum_date_wise$hh3code)
   ## creating summary (consolidated)
   consol_enum <- enum_date_wise %>% 
-    group_by(hh3name) %>%
+    group_by(hh3name, hh3code) %>%
     summarise(HH = sum(HH), n_mothers = sum(n_mothers), n_child = sum(n_child))
-  
+   
   ## returning a list of consolidated and datewise summary
   return(list(consol = consol_enum, date_wise = enum_date_wise))
 }

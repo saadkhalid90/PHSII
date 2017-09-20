@@ -203,7 +203,7 @@ function(input, output) {
                                                                       child_data = dataIn()$child,
                                                                       hc_data = dataIn()$hc)[[input$prog_type]],
                                                         filter = 'top',
-                                                        options = list(PageLength = 50)))
+                                                        options = list(pageLength = 50)))
   ## output$check <-  renderPrint(summary(immun_incon(child_data = dataIn()$child, hc_data = dataIn()$hc)$all_Dates_WS))
 }
 
