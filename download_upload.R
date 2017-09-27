@@ -16,10 +16,10 @@ download_upload_PHSII <- function(){
   child_link <- 'http://gatconsultancy.com/clustersurvey/report_exportalltable.php?table_name=child_under_two&submit=Download'
   
   ## downlaoding files from their links
-  download.file(url = hl_link, destfile = paste0(sub_dir, "/hl_", Sys.Date(), ".csv"))
-  download.file(url = hc_link, destfile = paste0(sub_dir, "/hc_", Sys.Date(), ".csv"))
-  download.file(url = mother_link, destfile = paste0(sub_dir, "/mother_", Sys.Date(), ".csv"))
-  download.file(url = child_link, destfile = paste0(sub_dir, "/child_", Sys.Date(), ".csv"))
+  download.file(url = hl_link, destfile = paste0(sub_dir, "/hl_comb_", Sys.Date(), ".csv"))
+  download.file(url = hc_link, destfile = paste0(sub_dir, "/hc_comb_", Sys.Date(), ".csv"))
+  download.file(url = mother_link, destfile = paste0(sub_dir, "/mother_comb_", Sys.Date(), ".csv"))
+  download.file(url = child_link, destfile = paste0(sub_dir, "/child_comb_", Sys.Date(), ".csv"))
   
   ## getting filenames that were not downloaded today
   filenames <- list.files(file.path(main_dir, sub_dir))
@@ -55,4 +55,4 @@ download_upload_PHSII <- function(){
 ## run the function 
 download_upload_PHSII()
 
-f
+
