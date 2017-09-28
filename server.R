@@ -108,6 +108,19 @@ function(input, output) {
             filter(child_age >= 12 & child_age < 24)
         }
         indic <- compute_immun_district(mother_data = dataIn()$mother, child_data = child)
+      },
+      "IM_cov" = {
+        ## append the date of enumeration and calculate the childs age, also filtering based on age_groups
+        child <- append_date_enum(data = dataIn()$child, hc_data = dataIn()$hc) 
+        if (input$age_group_1 == 1){
+          child <- child %>% 
+            filter(child_age >= 12 & child_age < 24)
+        }
+        else if (input$age_group_1 == 2){
+          child <- child %>% 
+            filter(child_age < 12)
+        }
+        indic <- compute_immun_cov_district(child_data = child)
       }
     )
     return(list(indic = indic, col_names = names(indic)))

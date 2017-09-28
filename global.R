@@ -611,6 +611,150 @@ compute_immun_district <- function(mother_data, child_data) {
   return(district_level_df)
 }
 
+compute_immun_indic_ind <- function(data, var1, var2, type = "global", first_birthday = T){
+  library(lubridate)
+  
+  ## getting the birthdate and converting into date element
+  birth_date <- as.Date(data[, "ag1"], format = "%d-%m-%Y")
+  
+  ## getting the dates of the relevant vaccines
+  dates_text <- data[, var1]
+  dates <- as.Date(data[, var1],format = "%d-%m-%Y")
+  
+  ## computing age at vaccination in months
+  interv <- interval(start = birth_date, end = dates) /
+    duration(num = 1, units = "months")
+  
+  ## checking if the child received the vaccine within his/ her first birthday
+  if (first_birthday == T){
+    card <- (interv < 12)
+  }
+  ## counting even if the vaccine was not received by the first birthday
+  if (first_birthday == F){
+    card <- is.finite(interv)
+  }
+  
+  card[is.na(card)] <- FALSE
+  
+  ## count mentions of vaccine without date on teh card
+  card_no_date <- grepl(pattern = "44", x = dates_text)
+  card_no_date[is.na(card_no_date)] <- FALSE
+  
+  ## also cheking if dates exist for vacine one and two if the variable is opv3 or penta3
+  
+  ## checking if var2 is either of im10 or im12, in that case check if teh child has
+  ## gotten at least three vaccines (polio and penta)
+  
+  ## if any other vaccines, just check if the mother recalls 
+  if (var2 %in% c("im10", "im12", "im15b")){
+    recall <- data[ ,var2] >= as.numeric(regmatches(x = var1, m = regexpr("([1-3])$", text = var1)))
+    recall[is.na(recall)] <- FALSE
+  }
+  else {
+    recall <- (data[, var2] == 1)
+    recall[is.na(recall)] <- FALSE
+  }
+  
+  ## or operation on the three logicals (card, card_nodate and recall
+  logic <- Reduce("|", list(card, card_no_date, recall))
+  ind <- sum(logic, na.rm = T)/ nrow(data)
+  
+  return(list(ind = ind, logic = logic))
+}
+
+
+compute_comp_immun_cov  <- function(child_data){
+  ## compute the logicals and inds lists of all vaccines
+  BCG <- compute_immun_indic_ind(data = child_data, var1 = "im3_bcg", var2 = "im7", first_birthday = F)
+  OPV0 <- compute_immun_indic_ind(data = child_data, var1 = "im3_opv.0", var2 = "im9", first_birthday = F)
+  OPV1 <- compute_immun_indic_ind(data = child_data, var1 = "im3_opv.1", var2 = "im10", first_birthday = F)
+  OPV2 <- compute_immun_indic_ind(data = child_data, var1 = "im3_opv.2", var2 = "im10", first_birthday = F)
+  OPV3 <- compute_immun_indic_ind(data = child_data, var1 = "im3_opv.3", var2 = "im10", first_birthday = F)
+  PENTA1 <- compute_immun_indic_ind(data = child_data, var1 = "im3_penta1", var2 = "im12", first_birthday = F)
+  PENTA2 <- compute_immun_indic_ind(data = child_data, var1 = "im3_penta.2", var2 = "im12", first_birthday = F)
+  PENTA3 <- compute_immun_indic_ind(data = child_data, var1 = "im3_penta.3", var2 = "im12", first_birthday = F)
+  PCV1 <- compute_immun_indic_ind(data = child_data, var1 = "im3_pcv10.1_pneumo.1", var2 = "im15b", first_birthday = F)
+  PCV2 <- compute_immun_indic_ind(data = child_data, var1 = "im3_pcv10.2_pneumo.2", var2 = "im15b", first_birthday = F)
+  PCV3 <- compute_immun_indic_ind(data = child_data, var1 = "im3_pcv10.3_pneumo.3", var2 = "im15b", first_birthday = F)
+  MEASLES1 <- compute_immun_indic_ind(data = child_data, var1 = "im3_measles.I", var2 = "X16a", first_birthday = F)
+  MEASLES2 <- compute_immun_indic_ind(data = child_data, var1 = "im3_measles.II", var2 = "X16b", first_birthday = F)
+  
+  ## applying and operation onthe logicals of all vaccines=
+  FULL <- Reduce("&", list(BCG$logic, OPV0$logic, OPV1$logic, OPV2$logic, OPV3$logic, PENTA1$logic, PENTA2$logic, PENTA3$logic, 
+                           PCV1$logic, PCV2$logic, PCV3$logic, MEASLES1$logic))
+  ## calculating full coverage indicator
+  FULL_cov <- sum(FULL, na.rm = T)/nrow(child_data)
+  
+  ## Return a DF of all vaccines
+  return(data.frame(BCG = percent(BCG$ind, 2), 
+                    OPV0 = percent(OPV0$ind, 2),
+                    OPV1 = percent(OPV1$ind, 2),
+                    OPV2 = percent(OPV2$ind, 2),
+                    OPV3 = percent(OPV3$ind, 2),
+                    PENTA1 = percent(PENTA1$ind, 2),
+                    PENTA2 = percent(PENTA2$ind, 2),
+                    PENTA3 = percent(PENTA3$ind, 2), 
+                    PCV1 = percent(PCV1$ind, 2),
+                    PCV2 = percent(PCV2$ind, 2),
+                    PCV3 = percent(PCV3$ind, 2),
+                    measles1 = percent(MEASLES1$ind, 2),
+                    measles2 = percent(MEASLES2$ind, 2),
+                    Full = percent(FULL_cov, 2), row.names = c("Punjab level")))
+}
+
+
+compute_immun_cov_district <- function(child_data) {
+  ## removing records with no cluster number just in case 
+  child_data <- remove_empty_rows(child_data)
+  ## adding districts across each cluster number
+  child_data$district <- as.character(cluster_districts$NAME.OF.DISTRICT[as.numeric(sub("RL", "", child_data$hh1))])
+  
+  ## getting unique districts
+  districts <- unique(child_data$district)
+  districts <- districts[!is.na(districts)]
+  
+  ## applying the coverage function across all districts
+  district_BCG <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_bcg", var2 = "im7", first_birthday = F)$ind)
+  district_OPV0 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_opv.0", var2 = "im9", first_birthday = F)$ind)
+  district_OPV1 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_opv.1", var2 = "im10", first_birthday = F)$ind)
+  district_OPV2 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_opv.2", var2 = "im10", first_birthday = F)$ind)
+  district_OPV3 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_opv.3", var2 = "im10", first_birthday = F)$ind)
+  district_PENTA1 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_penta1", var2 = "im12", first_birthday = F)$ind)
+  district_PENTA2 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_penta.2", var2 = "im12", first_birthday = F)$ind)
+  district_PENTA3 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_penta.3", var2 = "im12", first_birthday = F)$ind)
+  district_PCV1 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_pcv10.1_pneumo.1", var2 = "im15b", first_birthday = F)$ind)
+  district_PCV2 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_pcv10.2_pneumo.2", var2 = "im15b", first_birthday = F)$ind)
+  district_PCV3 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_pcv10.3_pneumo.3", var2 = "im15b", first_birthday = F)$ind)
+  district_MEASLES1 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_measles.I", var2 = "X16a", first_birthday = F)$ind)
+  district_MEASLES2 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_measles.II", var2 = "X16b", first_birthday = F)$ind)
+  district_MEASLES2 <- sapply(X = districts, function(x) compute_immun_indic_ind(subset(child_data, district == x), var1 = "im3_measles.II", var2 = "X16b", first_birthday = F)$ind)
+  district_FULL <- sapply(X = districts, function(x) compute_comp_immun_cov(subset(child_data, district == x))$Full)
+  
+  ## creating data frame of all vaccines/ district level
+  district_level_df <- data.frame(BCG = percent(district_BCG, 2), 
+                                  OPV0 = percent(district_OPV0, 2),
+                                  OPV1 = percent(district_OPV1, 2),
+                                  OPV2 = percent(district_OPV2, 2),
+                                  OPV3 = percent(district_OPV3, 2),
+                                  PENTA1 = percent(district_PENTA1, 2),
+                                  PENTA2 = percent(district_PENTA2, 2),
+                                  PENTA3 = percent(district_PENTA3, 2), 
+                                  PCV1 = percent(district_PCV1, 2),
+                                  PCV2 = percent(district_PCV2, 2),
+                                  PCV3 = percent(district_PCV3, 2),
+                                  measles1 = percent(district_MEASLES1, 2),
+                                  measles2 = percent(district_MEASLES2, 2),
+                                  Full = percent(district_FULL, 2))
+  ## setting the row names as names of districts
+  row.names(district_level_df) <- districts
+  ## computing all vaccine indics at punjab level
+  punjab_level_df <- compute_comp_immun_cov(child_data = child_data)
+  ## Combining Punjab and district level indicators
+  district_level_df <- rbind(punjab_level_df, district_level_df)
+  return(district_level_df)
+}
+
+
 global_ind <- function(mother_data, child_data, hc_data){
   AN <- compute_AN_indic(mother_data, type = "global")
   mother_time_split <- time_value_split(var = "pn2", data_set = mother_data, remove_orig = T)
